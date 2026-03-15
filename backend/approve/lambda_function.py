@@ -15,6 +15,23 @@ GITHUB_PRIVATE_KEY = os.environ["GITHUB_PRIVATE_KEY"]
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table("ci_failures")
 
+# ── CORS ─────────────────────────────────────────────────────────────────────
+
+HEADERS = {
+    "Content-Type"                 : "application/json",
+    "Access-Control-Allow-Origin"  : "*",
+    "Access-Control-Allow-Methods" : "GET, POST, OPTIONS"
+}
+
+def cors_response(status_code, body):
+    return {
+    "statusCode": 200,
+    "headers": HEADERS,
+    "body": json.dumps(body)
+    }
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 def verify_signature(payload_body, signature_header):
 
     if not signature_header:
@@ -199,7 +216,7 @@ def lambda_handler(event, context):
     event = json.loads(event["body"])
     failure_id = event["failure_id"]
     print("failure_id",failure_id)
-
+    
     if event["action"] == "deny":
         table.update_item(
             Key={
@@ -214,10 +231,7 @@ def lambda_handler(event, context):
             }
         )
 
-        return {
-            "statusCode": 200,
-            "body": "Skipping because action is denied by the user"
-        }
+        return cors_response(200, "Skipping because action is denied by the user")
 
     response = table.get_item(
         Key={
@@ -237,10 +251,7 @@ def lambda_handler(event, context):
     status = item['status']
 
     if status != 'pending_approval':
-        return {
-         "statusCode": 400,
-         "body": "Skipping because status is not pending_approval"
-        }
+        return cors_response(400, "Skipping because status is not pending_approval")
 
     try:
 
@@ -324,16 +335,10 @@ def lambda_handler(event, context):
             }
         )
         
-        return {
-            "statusCode": 200,
-            "body": json.dumps("Fix branch created and PR opened")
-        }
+        return cors_response(200, json.dumps("Fix branch created and PR opened"))
 
     except Exception as e:
 
         print("ERROR:", str(e))
 
-        return {
-            "statusCode": 500,
-            "body": json.dumps(str(e))
-        }
+        return cors_response(500, json.dumps(str(e)))
