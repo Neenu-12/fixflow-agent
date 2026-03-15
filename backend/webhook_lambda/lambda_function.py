@@ -20,7 +20,7 @@ WEBHOOK_SECRET = os.environ["GITHUB_WEBHOOK_SECRET"]
 GITHUB_APP_ID = os.environ["GITHUB_APP_ID"]
 GITHUB_PRIVATE_KEY = os.environ["GITHUB_PRIVATE_KEY"]
 
-MODEL_USED = "apac.amazon.nova-lite-v1:0"
+MODEL_USED = "global.amazon.nova-2-lite-v1:0"
 
 def verify_signature(payload_body, signature_header):
     if not signature_header:
