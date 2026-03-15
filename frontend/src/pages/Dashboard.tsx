@@ -1,19 +1,14 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { buildFailuresUrl } from "../config/api";
+import LoadingState from "../components/LoadingState";
 
 import {
+  Alert,
   Box,
   Card,
   Stack,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
-  Chip,
   Container,
   Grid,
 } from "@mui/material";
@@ -22,56 +17,126 @@ import {
   TrendingUp as TrendingIcon,
   PlayArrow as PlayIcon,
   CheckCircle as CheckIcon,
+  Cancel as DeniedIcon,
 } from "@mui/icons-material";
 
-interface FailureRecord {
-  repository: string;
-  error: string;
-  risk: "Low" | "Medium" | "High";
+interface ApiFailure {
+  failure_id?: string;
+  repo_name?: string;
 }
 
+interface DashboardData {
+  pendingCount: number;
+  approvedCount: number;
+  resolvedCount: number;
+  deniedCount: number;
+}
+
+const normalizeApiPayload = (payload: unknown): ApiFailure[] => {
+  if (Array.isArray(payload)) {
+    return payload as ApiFailure[];
+  }
+
+  if (payload && typeof payload === "object") {
+    const payloadObject = payload as Record<string, unknown>;
+
+    if (Array.isArray(payloadObject.data)) {
+      return payloadObject.data as ApiFailure[];
+    }
+
+    if (typeof payloadObject.body === "string") {
+      const parsedBody = JSON.parse(payloadObject.body) as unknown;
+
+      if (Array.isArray(parsedBody)) {
+        return parsedBody as ApiFailure[];
+      }
+
+      if (
+        parsedBody &&
+        typeof parsedBody === "object" &&
+        Array.isArray((parsedBody as Record<string, unknown>).data)
+      ) {
+        return (parsedBody as Record<string, unknown>).data as ApiFailure[];
+      }
+    }
+  }
+
+  return [];
+};
+
+const fetchByStatus = async (status: string): Promise<ApiFailure[]> => {
+  const response = await fetch(buildFailuresUrl({ status }), {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${status} failures (${response.status})`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  return normalizeApiPayload(payload);
+};
+
+const fetchDashboardData = async (): Promise<DashboardData> => {
+  const [pendingFailures, approvedFailures, deniedFailures] = await Promise.all([
+    fetchByStatus("pending_approval"),
+    fetchByStatus("approved"),
+    fetchByStatus("action_denied"),
+  ]);
+
+  return {
+    pendingCount: pendingFailures.length,
+    approvedCount: approvedFailures.length,
+    resolvedCount: approvedFailures.length,
+    deniedCount: deniedFailures.length,
+  };
+};
+
 const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["dashboard-summary"],
+    queryFn: fetchDashboardData,
+    refetchInterval: 1800000,
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return <LoadingState message="Loading dashboard..." />;
+  }
 
   const summaryCards = [
     {
       title: "Pending Fixes",
-      value: 3,
+      value: data?.pendingCount || 0,
       icon: <PlayIcon sx={{ fontSize: 28 }} />,
       color: "#F59E0B",
     },
     {
-      title: "Active PR Fixes",
-      value: 2,
+      title: "Approved Fixes",
+      value: data?.approvedCount || 0,
       icon: <TrendingIcon sx={{ fontSize: 28 }} />,
       color: "#3B82F6",
     },
     {
-      title: "Resolved Today",
-      value: 5,
+      title: "Resolved Count",
+      value: data?.resolvedCount || 0,
       icon: <CheckIcon sx={{ fontSize: 28 }} />,
       color: "#10B981",
     },
+    {
+      title: "Denied Actions",
+      value: data?.deniedCount || 0,
+      icon: <DeniedIcon sx={{ fontSize: 28 }} />,
+      color: "#EF4444",
+    },
   ];
-
-  const recentFailures: FailureRecord[] = [
-    { repository: "api-server", error: "Missing dependency", risk: "Medium" },
-    { repository: "worker", error: "Lint error", risk: "Low" },
-    { repository: "auth", error: "Syntax error", risk: "High" },
-  ];
-
-  const getRiskColor = (risk: "Low" | "Medium" | "High") => {
-    switch (risk) {
-      case "High":
-        return "error";
-      case "Medium":
-        return "warning";
-      case "Low":
-        return "success";
-      default:
-        return "default";
-    }
-  };
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -87,10 +152,18 @@ const Dashboard: React.FC = () => {
           </Typography>
         </Box>
 
+        {isError ? (
+          <Alert severity="error">
+            {error instanceof Error
+              ? error.message
+              : "Unable to load dashboard counts."}
+          </Alert>
+        ) : null}
+
         {/* Summary Cards */}
         <Grid container spacing={3}>
           {summaryCards.map((card, index) => (
-            <Grid key={index} size={{ xs: 12, sm: 6, md: 4 }}>
+            <Grid key={index} size={{ xs: 12, sm: 6, md: 3 }}>
               <Card
                 sx={{
                   p: 4,
@@ -144,61 +217,6 @@ const Dashboard: React.FC = () => {
             </Grid>
           ))}
         </Grid>
-
-        {/* Recent Failures */}
-        <Stack spacing={3}>
-          <Typography variant="h6" fontWeight={700}>
-            Recent Failures
-          </Typography>
-
-          <TableContainer
-            component={Paper}
-            sx={{
-              border: "1px solid #E5E7EB",
-              borderRadius: 3,
-            }}
-          >
-            <Table>
-              <TableHead>
-                <TableRow sx={{ background: "#F9FAFB" }}>
-                  <TableCell sx={{ fontWeight: 700 }}>Repository</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Error</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Risk</TableCell>
-                </TableRow>
-              </TableHead>
-
-              <TableBody>
-                {recentFailures.map((failure, index) => (
-                  <TableRow
-                    key={index}
-                    onClick={() => navigate(`/failure/${failure.repository}`)}
-                    sx={{
-                      cursor: "pointer",
-                      "&:hover": {
-                        background: "#F9FAFB",
-                      },
-                    }}
-                  >
-                    <TableCell sx={{ fontWeight: 600 }}>
-                      {failure.repository}
-                    </TableCell>
-
-                    <TableCell>{failure.error}</TableCell>
-
-                    <TableCell>
-                      <Chip
-                        label={failure.risk}
-                        color={getRiskColor(failure.risk)}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Stack>
       </Stack>
     </Container>
   );

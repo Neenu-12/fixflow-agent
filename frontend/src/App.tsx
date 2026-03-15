@@ -1,14 +1,14 @@
 import { Routes, Route } from "react-router-dom";
 
 import Landing from "./pages/Landing";
-import Login from "./pages/Login";
+import Login from "./pages/Login.tsx";
 import Dashboard from "./pages/Dashboard";
 import PendingFixes from "./pages/PendingFixes";
-import ActiveFixes from "./pages/ActiveFixes";
+// import ActiveFixes from "./pages/ActiveFixes";
 import ResolvedFixes from "./pages/ResolvedFixes";
+import ResolvedFixDetail from "./pages/ResolvedFixDetail";
 import FailureDetail from "./pages/FailureDetail";
-import Repositories from "./pages/Repositories";
-import Settings from "./pages/Settings";
+// import Repositories from "./pages/Repositories";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./layout/AppLayout";
@@ -30,11 +30,11 @@ function App() {
       >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/pending" element={<PendingFixes />} />
-        <Route path="/active" element={<ActiveFixes />} />
+        {/* <Route path="/active" element={<ActiveFixes />} /> */}
         <Route path="/resolved" element={<ResolvedFixes />} />
-        <Route path="/failure/:id" element={<FailureDetail />} />
-        <Route path="/repositories" element={<Repositories />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/resolved-detail" element={<ResolvedFixDetail />} />
+        <Route path="/failure" element={<FailureDetail />} />
+        {/* <Route path="/repositories" element={<Repositories />} /> */}
       </Route>
     </Routes>
   );

@@ -19,10 +19,7 @@ import {
 import {
   Dashboard as DashboardIcon,
   MoreTime as PendingIcon,
-  PlayArrow as ActiveFixesIcon,
   CheckCircle as ResolvedIcon,
-  Storage as RepositoriesIcon,
-  Settings as SettingsIcon,
   Menu as MenuIcon,
   Notifications as NotificationsIcon,
   Close as CloseIcon,
@@ -34,10 +31,7 @@ const DRAWER_WIDTH = 260;
 const menuItems = [
   { label: "Dashboard", icon: DashboardIcon, route: "/dashboard" },
   { label: "Pending Fixes", icon: PendingIcon, route: "/pending" },
-  { label: "Active Fixes", icon: ActiveFixesIcon, route: "/active" },
   { label: "Resolved Fixes", icon: ResolvedIcon, route: "/resolved" },
-  { label: "Repositories", icon: RepositoriesIcon, route: "/repositories" },
-  { label: "Settings", icon: SettingsIcon, route: "/settings" },
 ];
 
 export default function AppLayout() {

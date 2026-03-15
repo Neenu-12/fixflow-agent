@@ -1,5 +1,10 @@
 import React, { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { API_ENDPOINTS, buildFailuresUrl } from "../config/api";
 import DiffViewer from "../components/DiffViewer";
+import LoadingState from "../components/LoadingState";
+import EmptyState from "../components/EmptyState";
 
 import {
   Box,
@@ -20,16 +25,189 @@ import {
   BugReport as BugIcon,
 } from "@mui/icons-material";
 
+interface ApiFileToModify {
+  file?: string;
+  original_content?: string;
+  new_content?: string;
+}
+
+interface ApiFailureDetail {
+  failure_id?: string;
+  repo_name?: string;
+  branch?: string;
+  commit_sha?: string;
+  root_cause?: string;
+  confidence_score?: number | string;
+  risk_score?: string;
+  files_to_modify?: ApiFileToModify[];
+}
+
+const normalizeRisk = (risk?: string): string => {
+  if (!risk) {
+    return "Low";
+  }
+
+  const normalized = risk.toLowerCase();
+  if (normalized === "high") {
+    return "High";
+  }
+
+  if (normalized === "medium") {
+    return "Medium";
+  }
+
+  return "Low";
+};
+
+const confidenceLabel = (score: number): string => {
+  if (score >= 90) {
+    return "Very High";
+  }
+
+  if (score >= 75) {
+    return "High";
+  }
+
+  if (score >= 60) {
+    return "Medium";
+  }
+
+  return "Low";
+};
+
+const parsePayload = (payload: unknown): ApiFailureDetail | null => {
+  if (Array.isArray(payload)) {
+    return (payload[0] as ApiFailureDetail | undefined) || null;
+  }
+
+  if (payload && typeof payload === "object") {
+    const payloadObj = payload as Record<string, unknown>;
+
+    if (Array.isArray(payloadObj.data)) {
+      return (payloadObj.data[0] as ApiFailureDetail | undefined) || null;
+    }
+
+    if (payloadObj.data && typeof payloadObj.data === "object") {
+      return payloadObj.data as ApiFailureDetail;
+    }
+
+    if (typeof payloadObj.body === "string") {
+      const parsedBody = JSON.parse(payloadObj.body) as unknown;
+      return parsePayload(parsedBody);
+    }
+
+    if (typeof payloadObj.failure_id === "string") {
+      return payloadObj as ApiFailureDetail;
+    }
+  }
+
+  return null;
+};
+
+const buildDiffText = (change?: ApiFileToModify): { fileName: string; diffText: string } => {
+  if (!change) {
+    return {
+      fileName: "no-file.txt",
+      diffText: "No file changes available.",
+    };
+  }
+
+  const fileName = change.file || "unknown-file";
+  const originalLines = (change.original_content || "")
+    .split("\n")
+    .map((line) => `-${line}`)
+    .join("\n");
+  const updatedLines = (change.new_content || "")
+    .split("\n")
+    .map((line) => `+${line}`)
+    .join("\n");
+
+  return {
+    fileName,
+    diffText: `diff --git a/${fileName} b/${fileName}\n--- a/${fileName}\n+++ b/${fileName}\n@@\n${originalLines}\n${updatedLines}`,
+  };
+};
+
+const fetchFailureDetail = async (failureId: string): Promise<ApiFailureDetail> => {
+  const response = await fetch(buildFailuresUrl({ failure_id: failureId }), {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch failure detail (${response.status})`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  const detail = parsePayload(payload);
+
+  if (!detail) {
+    throw new Error("Failure detail not found.");
+  }
+
+  return detail;
+};
+
 const FailureDetail: React.FC = () => {
   const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">("success");
+  const [searchParams] = useSearchParams();
 
-  const handleApproveFix = () => {
-    setOpenSnackbar(true);
-  };
+  const failureId = searchParams.get("failure_id") || "";
 
-  const handleRejectFix = () => {
-    console.log("Fix rejected");
-  };
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["failure-detail", failureId],
+    queryFn: () => fetchFailureDetail(failureId),
+    enabled: Boolean(failureId),
+    staleTime: 60000,
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: (action: "approve" | "deny") =>
+      fetch(API_ENDPOINTS.approve, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ failure_id: failureId, action }),
+      }).then((res) => {
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        return res.json();
+      }),
+    onSuccess: (_data, action) => {
+      setSnackbarSeverity("success");
+      setSnackbarMessage(
+        action === "approve" ? "Fix approved successfully." : "Fix denied successfully.",
+      );
+      setOpenSnackbar(true);
+    },
+    onError: (err) => {
+      setSnackbarSeverity("error");
+      setSnackbarMessage(
+        err instanceof Error ? err.message : "Unable to submit action.",
+      );
+      setOpenSnackbar(true);
+    },
+  });
+
+  const repository = data?.repo_name || "Unknown repository";
+  const branch = data?.branch || "Unknown";
+  const commitSha = data?.commit_sha || "N/A";
+  const rootCause = data?.root_cause || "No root cause provided.";
+  const confidenceScore = Number(data?.confidence_score || 0);
+  const riskLevel = normalizeRisk(data?.risk_score);
+  const { fileName, diffText } = buildDiffText(data?.files_to_modify?.[0]);
+
+  const handleApproveFix = () => actionMutation.mutate("approve");
+  const handleRejectFix = () => actionMutation.mutate("deny");
+
+  if (!failureId) {
+    return <EmptyState message="No failure selected. Open from the Pending Fixes list." />;
+  }
+
+  if (isLoading) {
+    return <LoadingState message="Loading failure details..." />;
+  }
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -48,6 +226,14 @@ const FailureDetail: React.FC = () => {
             Review the CI failure and suggested fix
           </Typography>
         </Box>
+
+        {isError ? (
+          <Alert severity="error">
+            {error instanceof Error
+              ? error.message
+              : "Unable to load failure detail."}
+          </Alert>
+        ) : null}
 
         {/* Info Grid */}
         <Grid container spacing={3}>
@@ -81,7 +267,7 @@ const FailureDetail: React.FC = () => {
                   </Typography>
 
                   <Typography fontWeight={600} fontSize={16}>
-                    api-server
+                    {repository}
                   </Typography>
                 </Box>
 
@@ -95,7 +281,7 @@ const FailureDetail: React.FC = () => {
                     Branch
                   </Typography>
 
-                  <Typography fontWeight={600}>main</Typography>
+                  <Typography fontWeight={600}>{branch}</Typography>
                 </Box>
 
                 <Box>
@@ -121,7 +307,7 @@ const FailureDetail: React.FC = () => {
                       color: "#4F46E5",
                     }}
                   >
-                    abc123def456
+                    {commitSha}
                   </Typography>
                 </Box>
               </Stack>
@@ -157,21 +343,7 @@ const FailureDetail: React.FC = () => {
                     Root Cause
                   </Typography>
 
-                  <Typography fontSize={15}>
-                    Module{" "}
-                    <Typography
-                      component="span"
-                      fontFamily="monospace"
-                      sx={{
-                        background: "#F3F4F6",
-                        px: 1,
-                        borderRadius: 1,
-                      }}
-                    >
-                      pandas
-                    </Typography>{" "}
-                    imported but not listed in requirements.txt
-                  </Typography>
+                  <Typography fontSize={15}>{rootCause}</Typography>
                 </Box>
 
                 {/* Confidence + Risk */}
@@ -194,11 +366,11 @@ const FailureDetail: React.FC = () => {
 
                     <Stack direction="row" alignItems="center" spacing={1}>
                       <Typography fontWeight={700} fontSize={24}>
-                        91%
+                        {confidenceScore}%
                       </Typography>
 
                       <Chip
-                        label="Very High"
+                        label={confidenceLabel(confidenceScore)}
                         size="small"
                         sx={{
                           background: "#DBEAFE",
@@ -220,10 +392,10 @@ const FailureDetail: React.FC = () => {
                     </Typography>
 
                     <Stack direction="row" alignItems="center" spacing={1}>
-                      <Typography fontWeight={700}>Medium</Typography>
+                      <Typography fontWeight={700}>{riskLevel}</Typography>
 
                       <Chip
-                        label="Moderate"
+                        label={riskLevel}
                         size="small"
                         sx={{
                           background: "#FEF3C7",
@@ -258,7 +430,7 @@ const FailureDetail: React.FC = () => {
                 <Typography fontWeight={700}>Suggested Fix</Typography>
 
                 <Typography fontSize={13} color="#6B7280">
-                  AI-generated patch with 91% confidence
+                  AI-generated patch with {confidenceScore}% confidence
                 </Typography>
               </Box>
             </Stack>
@@ -273,12 +445,8 @@ const FailureDetail: React.FC = () => {
               }}
             >
               <DiffViewer
-                fileName="requirements.txt"
-                diffText={`diff --git a/requirements.txt b/requirements.txt
-@@
- numpy
- flask
-+ pandas==2.2.1`}
+                fileName={fileName}
+                diffText={diffText}
               />
             </Box>
           </Stack>
@@ -290,6 +458,7 @@ const FailureDetail: React.FC = () => {
             variant="contained"
             startIcon={<CheckCircle />}
             onClick={handleApproveFix}
+            disabled={actionMutation.isPending}
             sx={{
               background: "#10B981",
               textTransform: "none",
@@ -304,13 +473,16 @@ const FailureDetail: React.FC = () => {
               },
             }}
           >
-            Approve Fix
+            {actionMutation.isPending && actionMutation.variables === "approve"
+              ? "Approving..."
+              : "Approve Fix"}
           </Button>
 
           <Button
             variant="outlined"
             startIcon={<RejectIcon />}
             onClick={handleRejectFix}
+            disabled={actionMutation.isPending}
             sx={{
               borderColor: "#EF4444",
               color: "#EF4444",
@@ -326,7 +498,9 @@ const FailureDetail: React.FC = () => {
               },
             }}
           >
-            Reject
+            {actionMutation.isPending && actionMutation.variables === "deny"
+              ? "Denying..."
+              : "Deny"}
           </Button>
         </Stack>
 
@@ -337,8 +511,8 @@ const FailureDetail: React.FC = () => {
           onClose={() => setOpenSnackbar(false)}
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
         >
-          <Alert severity="success" variant="filled">
-            Pull Request created successfully!
+          <Alert severity={snackbarSeverity} variant="filled">
+            {snackbarMessage}
           </Alert>
         </Snackbar>
       </Stack>

@@ -1,17 +1,25 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Box, Button, Card, Container, Stack, Typography } from "@mui/material";
 import {
-  GitHub as GitHubIcon,
-  Google as GoogleIcon,
-} from "@mui/icons-material";
+  Box,
+  Button,
+  Card,
+  CircularProgress,
+  Container,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { Google as GoogleIcon } from "@mui/icons-material";
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
-  const handleLogin = () => {
+  const handleGoogleLogin = async () => {
+    setIsSigningIn(true);
+    await new Promise((resolve) => setTimeout(resolve, 700));
     login();
     navigate("/dashboard");
   };
@@ -37,7 +45,6 @@ const Login: React.FC = () => {
           }}
         >
           <Stack spacing={0}>
-            {/* Header */}
             <Box
               sx={{
                 background: "linear-gradient(135deg, #4F46E5 0%, #6366F1 100%)",
@@ -62,7 +69,6 @@ const Login: React.FC = () => {
               </Typography>
             </Box>
 
-            {/* Content */}
             <Box sx={{ px: 4, py: 6 }}>
               <Typography
                 variant="h5"
@@ -84,15 +90,18 @@ const Login: React.FC = () => {
                   fontSize: 14,
                 }}
               >
-                Continue with your account to access the dashboard
+                Continue with your Google account to access the dashboard
               </Typography>
 
               <Stack spacing={3}>
                 <Button
                   variant="contained"
                   size="large"
-                  startIcon={<GitHubIcon />}
-                  onClick={handleLogin}
+                  startIcon={
+                    isSigningIn ? <CircularProgress size={18} color="inherit" /> : <GoogleIcon />
+                  }
+                  onClick={handleGoogleLogin}
+                  disabled={isSigningIn}
                   sx={{
                     textTransform: "none",
                     backgroundColor: "#4F46E5",
@@ -105,42 +114,9 @@ const Login: React.FC = () => {
                     },
                   }}
                 >
-                  Continue with GitHub
-                </Button>
-
-                <Button
-                  variant="outlined"
-                  size="large"
-                  startIcon={<GoogleIcon />}
-                  onClick={handleLogin}
-                  sx={{
-                    textTransform: "none",
-                    fontWeight: 600,
-                    fontSize: 15,
-                    borderColor: "#D1D5DB",
-                    color: "#111827",
-                    backgroundColor: "#fff",
-                    "&:hover": {
-                      backgroundColor: "rgba(79,70,229,0.05)",
-                      borderColor: "#4F46E5",
-                    },
-                  }}
-                >
-                  Continue with Google
+                  {isSigningIn ? "Signing in..." : "Continue with Google"}
                 </Button>
               </Stack>
-
-              <Typography
-                variant="caption"
-                sx={{
-                  textAlign: "center",
-                  display: "block",
-                  mt: 4,
-                  color: "#9CA3AF",
-                }}
-              >
-                By signing in, you agree to our Terms and Privacy Policy
-              </Typography>
             </Box>
           </Stack>
         </Card>

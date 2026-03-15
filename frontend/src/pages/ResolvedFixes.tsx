@@ -1,6 +1,10 @@
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { buildFailuresUrl } from "../config/api";
 import { Box, Stack } from "@mui/material";
 import {
+  Alert,
   Chip,
   Container,
   Paper,
@@ -12,37 +16,69 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
+import LoadingState from "../components/LoadingState";
+import EmptyState from "../components/EmptyState";
 
 interface ResolvedFix {
+  failureId: string;
   repository: string;
   fixApplied: string;
   result: "Success" | "Failed";
 }
 
-const ResolvedFixes: React.FC = () => {
-  const resolvedFixesData: ResolvedFix[] = [
-    {
-      repository: "api-server",
-      fixApplied: "Add pandas dependency",
-      result: "Success",
-    },
-    {
-      repository: "worker",
-      fixApplied: "Fix lint formatting",
-      result: "Success",
-    },
-  ];
+interface ApiFailure {
+  failure_id?: string;
+  repo_name?: string;
+  root_cause?: string;
+}
 
-  const getChipColor = (result: "Success" | "Failed"): "success" | "error" => {
-    switch (result) {
-      case "Success":
-        return "success";
-      case "Failed":
-        return "error";
-      default:
-        return "success";
+const normalizePayload = (payload: unknown): ApiFailure[] => {
+  if (Array.isArray(payload)) return payload as ApiFailure[];
+  if (payload && typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+    if (Array.isArray(obj.data)) return obj.data as ApiFailure[];
+    if (typeof obj.body === "string") {
+      const parsed = JSON.parse(obj.body) as unknown;
+      if (Array.isArray(parsed)) return parsed as ApiFailure[];
     }
-  };
+  }
+  return [];
+};
+
+const fetchResolvedFixes = async (): Promise<ResolvedFix[]> => {
+  const res = await fetch(buildFailuresUrl({ status: "approved" }), {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Failed to fetch resolved fixes (${res.status})`);
+  const payload = (await res.json()) as unknown;
+  return normalizePayload(payload).map((f, i) => ({
+    failureId: f.failure_id || `${f.repo_name || "repo"}-${i}`,
+    repository: f.repo_name || "Unknown repository",
+    fixApplied: f.root_cause || "Fix applied",
+    result: "Success" as const,
+  }));
+};
+
+const getChipColor = (result: "Success" | "Failed"): "success" | "error" =>
+  result === "Success" ? "success" : "error";
+
+const ResolvedFixes: React.FC = () => {
+  const navigate = useNavigate();
+  const {
+    data: resolvedFixesData = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["resolved-fixes"],
+    queryFn: fetchResolvedFixes,
+    refetchInterval: 1800000,
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return <LoadingState message="Loading resolved fixes..." />;
+  }
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -64,8 +100,18 @@ const ResolvedFixes: React.FC = () => {
           </Typography>
         </Box>
 
+        {isError && (
+          <Alert severity="error">
+            {error instanceof Error ? error.message : "Unable to fetch resolved fixes."}
+          </Alert>
+        )}
+
+        {!isError && resolvedFixesData.length === 0 && (
+          <EmptyState message="No resolved fixes found." />
+        )}
+
         {/* Table */}
-        <TableContainer
+        {resolvedFixesData.length > 0 && <TableContainer
           component={Paper}
           sx={{
             background: "#FFFFFF",
@@ -121,10 +167,14 @@ const ResolvedFixes: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {resolvedFixesData.map((fix, index) => (
+              {resolvedFixesData.map((fix) => (
                 <TableRow
-                  key={index}
+                  key={fix.failureId}
+                  onClick={() =>
+                    navigate(`/resolved-detail?failure_id=${encodeURIComponent(fix.failureId)}`)
+                  }
                   sx={{
+                    cursor: "pointer",
                     transition: "all 0.2s",
                     borderBottom: "1px solid #E5E7EB",
                     "&:last-child": {
@@ -167,7 +217,7 @@ const ResolvedFixes: React.FC = () => {
               ))}
             </TableBody>
           </Table>
-        </TableContainer>
+        </TableContainer>}
       </Stack>
     </Container>
   );
