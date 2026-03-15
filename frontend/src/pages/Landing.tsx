@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 
 import {
-  GitHub,
+  Google,
   AutoFixHigh,
   CheckCircle,
   BugReport,
@@ -95,7 +95,7 @@ const Landing: React.FC = () => {
               onClick={() => navigate("/login")}
               sx={{ textTransform: "none", fontWeight: 600 }}
             >
-              Sign In
+              Sign in with Google
             </Button>
 
             <Button
@@ -109,7 +109,7 @@ const Landing: React.FC = () => {
                 "&:hover": { background: "#6366F1" },
               }}
             >
-              Get Started
+              Continue with Google
             </Button>
           </Stack>
         </Toolbar>
@@ -153,7 +153,7 @@ const Landing: React.FC = () => {
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                   <Button
                     variant="contained"
-                    startIcon={<GitHub />}
+                    startIcon={<Google />}
                     onClick={() => navigate("/login")}
                     sx={{
                       background: "#4F46E5",
@@ -164,7 +164,7 @@ const Landing: React.FC = () => {
                       "&:hover": { background: "#6366F1" },
                     }}
                   >
-                    Continue with GitHub
+                    Continue with Google
                   </Button>
 
                   <Button
@@ -341,7 +341,7 @@ const Landing: React.FC = () => {
             <Stack direction="row" spacing={2} justifyContent="center">
               <Button
                 variant="contained"
-                startIcon={<GitHub />}
+                startIcon={<Google />}
                 onClick={() => navigate("/login")}
                 sx={{
                   background: "#fff",
@@ -351,7 +351,7 @@ const Landing: React.FC = () => {
                   px: 4,
                 }}
               >
-                Get Started
+                Sign in with Google
               </Button>
 
               <Button

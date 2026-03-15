@@ -69,7 +69,7 @@ const Settings: React.FC = () => {
                   user@example.com
                 </Typography>
                 <Typography sx={{ fontSize: 13, color: "#6B7280" }}>
-                  GitHub Premium
+                  Google Account
                 </Typography>
               </Stack>
             </Stack>
